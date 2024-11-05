@@ -42,7 +42,7 @@ begin
 
   WriteLn;
 
-  WriteLn('Adding unique numbers 5 and 100...');
+  WriteLn('Adding unique numbers 5 and 11...');
 
   C.AddUnique(5);
   C.AddUnique(11);
