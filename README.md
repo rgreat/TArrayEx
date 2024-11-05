@@ -10,15 +10,21 @@ Basically:
 Basic usage:
 ```
 var
-  A,B,C : TArrayEx<Integer>;
+  A : TArray<Integer>;
+  B,C : TArrayEx<Integer>;
 begin  
   A := [5,6,7,8,9];
   B := [1,2,3,4,5];
-  C := A + B;
+  C := A + B;  // concat and implicit typecast
 
-  WriteLn(A.ToString);
-  WriteLn(B.ToString);
+  WriteLn(C.ToString);  // To string RTTI conversion
+  WriteLn('A + B = C is ', A + B = C); // compare arrays
+
+  C.Add(10);
+  C.AddUnique(10);  // will not be added
+  C.Delete(C.High); // delete last
   WriteLn(C.ToString);
-  WriteLn('A + B = C is ', A + B = C);
+
+  // More features are shown in example and in unit code.
 end.
 ```
