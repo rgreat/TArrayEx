@@ -23,7 +23,7 @@ begin
   C.Add(10);
   C.AddUnique(10);  // will not be added
   C.Delete(C.High); // delete last
-  WriteLn(C.ToString);
+  WriteLn(C.Exists(10)); // should be false
 
   // More features are shown in example and in unit code.
 end.
