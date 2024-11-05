@@ -1,13 +1,14 @@
 Generic Array with extra features.
 
 Basically:
+```
   TArrayEx<T> = record
     Items      : array of T;
     // a lot of stuff
   end;
-
+```
 Basic usage:
-
+```
 var
   A,B,C : TArrayEx<Integer>;
 begin  
@@ -20,3 +21,4 @@ begin
   WriteLn(C.ToString);
   WriteLn('A + B = C is ', A + B = C);
 end.
+```
