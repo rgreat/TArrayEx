@@ -1,14 +1,14 @@
 Generic Array with extra features.
 
 Basically:
-```
+```pascal
   TArrayEx<T> = record
     Items      : array of T;
     // a lot of stuff
   end;
 ```
 Basic usage:
-```
+```pascal
 var
   A : TArray<Integer>;
   B,C : TArrayEx<Integer>;
