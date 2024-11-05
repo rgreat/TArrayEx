@@ -92,7 +92,7 @@ begin
 
   WriteLn('New elements added from D: [', TArrayEx<integer>(Compare.Added).ToString, ']');
   WriteLn('Existing elements removed from C: [', TArrayEx<integer>(Compare.Removed).ToString,']');
-  WriteLn('Results come as indexes in array.');
+  WriteLn('Results come as indexes in arrays.');
 
   WriteLn;
   ReadLn;
