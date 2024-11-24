@@ -28,3 +28,6 @@ begin
   // More features are shown in example and in unit code.
 end.
 ```
+
+
+License: Freeware.
