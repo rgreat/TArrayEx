@@ -30,4 +30,4 @@ end.
 ```
 
 
-License: Freeware.
+License: Freeware. Use as you see fit.
