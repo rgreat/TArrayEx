@@ -77,8 +77,6 @@ type
   // --------------------- TArrayEx (Extended array) -------------------------
   // -------------------------------------------------------------------------
 
-{$REGION 'TArrayEx'}
-
   { TArrayEx }
 
   TArrayEx<T> = record
@@ -186,6 +184,7 @@ type
 
     // Delete element(s) by index
     procedure Delete(Index: integer); {$IFDEF Inline} inline; {$ENDIF}
+    procedure DeleteValues(Value: T); {$IFDEF Inline} inline; {$ENDIF}
     procedure DeleteRange(Index, Count: integer); {$IFDEF Inline} inline; {$ENDIF}
     procedure DeleteFirst; {$IFDEF Inline} inline; {$ENDIF}
     procedure DeleteLast; {$IFDEF Inline} inline; {$ENDIF}
@@ -269,7 +268,7 @@ type
     class operator Equal(const A,B: TArrayEx<T>): Boolean;
     class operator NotEqual(const A,B: TArrayEx<T>): Boolean;
   end;
-{$ENDREGION}
+  {$ENDREGION}
 
 var
   TArrayExUseOptimisation : boolean = True;
@@ -432,6 +431,16 @@ begin
 
   CreateIndex(Length(FIndexArray));
 end;
+
+procedure TArrayEx<T>.DeleteValues(Value: T);
+begin
+  var Idx:=IndexesOf(Value);
+
+  for var i:=Idx.High downto 0 do begin
+    Delete(Idx[i]);
+  end;
+end;
+
 
 procedure TArrayEx<T>.DeleteFirst;
 begin
@@ -1027,6 +1036,7 @@ begin
   if FEnumInit<>'Y' then begin
     FCollection:=TCollection.Create(Self);
     FEnumInit:='Y';
+    Tag:=0;
   end;
   Result:=FCollection;
 end;
@@ -1116,6 +1126,7 @@ end;
 {$IFDEF MANAGEDRECORDS}
 class operator TArrayEx<T>.Initialize(out Dest: TArrayEx<T>);
 begin
+  Dest.Tag:=0;
   Dest.Clear;
 end;
 {$ENDIF}
