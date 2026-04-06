@@ -5,12 +5,19 @@ program Example;
 {$R *.res}
 
 uses
+  madExcept,
+  madLinkDisAsm,
+  madListHardware,
+  madListProcesses,
+  madListModules,
   System.SysUtils,
   ArrayEx;
 
 var
+  i     : integer;
   A     : TArray<Integer>;
   B,C,D : TArrayEx<Integer>;
+  E     : TArrayEx<TObject>;
 
 
 procedure PrintArray(Name: string; const Arr: TArrayEx<Integer>);
@@ -93,6 +100,12 @@ begin
   WriteLn('New elements added from D: [', TArrayEx<integer>(Compare.Added).ToString, ']');
   WriteLn('Existing elements removed from C: [', TArrayEx<integer>(Compare.Removed).ToString,']');
   WriteLn('Results come as indexes in arrays.');
+
+  E.DoFreeData:=True;
+  for i:=1 to 10 do begin
+    E.Add(TObject.Create);
+  end;
+  E.Clear;
 
   WriteLn;
   ReadLn;

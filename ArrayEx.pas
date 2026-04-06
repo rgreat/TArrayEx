@@ -252,6 +252,7 @@ type
 {$IFDEF MANAGEDRECORDS}
     // Init array
     class operator Initialize(out Dest: TArrayEx<T>);
+    class operator Finalize(var Dest: TArrayEx<T>);
 {$ENDIF}
 
     // Class operators
@@ -420,7 +421,7 @@ var
 begin
   if (Index<0) or (Index>High) then Exit;
 
-  if DoFreeData and (PTypeInfo(TypeInfo(TValue)).Kind=tkClass) then begin
+  if DoFreeData and (PTypeInfo(TypeInfo(T)).Kind=tkClass) then begin
     FreeElement(Index);
   end;
 
@@ -1127,6 +1128,12 @@ end;
 class operator TArrayEx<T>.Initialize(out Dest: TArrayEx<T>);
 begin
   Dest.Tag:=0;
+  Dest.Clear;
+end;
+
+class operator TArrayEx<T>.Finalize(var Dest: TArrayEx<T>);
+begin
+  Dest.FCollection.Free;
   Dest.Clear;
 end;
 {$ENDIF}
