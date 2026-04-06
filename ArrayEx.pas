@@ -268,11 +268,13 @@ type
 {$ENDIF}
     class operator Equal(const A,B: TArrayEx<T>): Boolean;
     class operator NotEqual(const A,B: TArrayEx<T>): Boolean;
+
   end;
   {$ENDREGION}
 
 var
-  TArrayExUseOptimisation : boolean = True;
+  TArrayExUseOptimisation      : boolean = True;
+  TArrayExHideExceptionsOnFree : boolean = True;
 
 implementation
 
@@ -683,10 +685,15 @@ end;
 
 procedure TArrayEx<T>.FreeElement(Num: integer);
 begin
-  try
+  if TArrayExHideExceptionsOnFree then begin
+    try
+      PObject(@Items[num])^.Free;
+      Items[num]:=Default(T);
+    except
+    end;
+  end else begin
     PObject(@Items[num])^.Free;
     Items[num]:=Default(T);
-  except
   end;
 end;
 
