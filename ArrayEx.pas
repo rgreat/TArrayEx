@@ -268,7 +268,6 @@ type
 {$ENDIF}
     class operator Equal(const A,B: TArrayEx<T>): Boolean;
     class operator NotEqual(const A,B: TArrayEx<T>): Boolean;
-
   end;
   {$ENDREGION}
 
@@ -1140,7 +1139,10 @@ end;
 
 class operator TArrayEx<T>.Finalize(var Dest: TArrayEx<T>);
 begin
-  Dest.FCollection.Free;
+  if Dest.FEnumInit='Y' then begin
+    Dest.FCollection.Free;
+    Dest.FEnumInit:='';
+  end;
   Dest.Clear;
 end;
 {$ENDIF}

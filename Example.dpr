@@ -103,9 +103,8 @@ begin
 
   E.DoFreeData:=True;
   for i:=1 to 10 do begin
-    E.Add(TObject.Create);
+    E.Add(TObject.Create); // No Leaks
   end;
-  E.Clear;
 
   WriteLn;
   ReadLn;
