@@ -154,6 +154,15 @@ type
     // Clear array
     procedure Clear; overload;
 
+    // Array items count
+    property Count: integer read GetCount write SetCount;
+    // First element index
+    property Low: integer read GetLow;
+    // Last element index
+    property High: integer read GetHigh write SetHigh;
+    // if Count=0 ?
+    function IsEmpty: boolean;
+
     // Add item to the end of the array
     function Add(Value: T): integer; overload; {$IFDEF Inline} inline; {$ENDIF}
     function Add(const Values: array of T): integer; overload;
@@ -182,15 +191,6 @@ type
     // Clear Hash Table
     procedure DropIndex;
     procedure ClearIndex;
-
-    // Array items count
-    property Count: integer read GetCount write SetCount;
-    // First element index
-    property Low: integer read GetLow;
-    // Last element index
-    property High: integer read GetHigh write SetHigh;
-    // if Count=0 ?
-    function IsEmpty: boolean;
 
     // First and last elements of array
     property First: T read GetFirst write SetFirst;
@@ -617,14 +617,6 @@ function TArrayEx<T>.GetElements(Index: integer): T;
 begin
   Result:=Items[Index];
 end;
-
-//function TArrayEx<T>.Collection: TCollection;
-//begin
-//  if not Assigned(FCollection) then begin
-//    FCollection:=TCollection.Create(Self);
-//  end;
-//  Result:=FCollection;
-//end;
 
 function TArrayEx<T>.GetEnumerator: TItemEnumerator;
 begin
