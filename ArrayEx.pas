@@ -77,52 +77,40 @@ type
   // --------------------- TArrayEx (Extended array) -------------------------
   // -------------------------------------------------------------------------
 
+  {$REGION 'TArrayEx'}
+
   { TArrayEx }
 
   TArrayEx<T> = record
   public
     // Direct item access (unsafe)
     Items      : array of T;
+
     // User Tag
     Tag        : integer;
+
     // Need to free elements on destroy
-    DoFreeData : Boolean;
+    OwnValues  : Boolean;
+    // Optional Alias (deprecated)
+    property DoFreeData: boolean read OwnValues write OwnValues;
   private
-{$IFDEF MODERNCOMPILER}
     type
-      TCollection = class;
+      TItems = array of T;
+      PItems = ^TItems;
 
       TItemEnumerator = class(TEnumerator<T>)
       private
-        FParent : TCollection;
+        Parent  : PItems;
         FIndex  : Integer;
         function GetCurrent: T;
       protected
         function DoGetCurrent: T; override;
         function DoMoveNext: Boolean; override;
       public
-        constructor Create(Parent: TCollection);
+        constructor Create(const Parent: TArrayEx<T>);
         property Current: T read GetCurrent;
         function MoveNext: Boolean;
       end;
-
-      { TCollection }
-
-      TCollection = class(TEnumerable<T>)
-      private
-        FParent : pointer;
-        function GetCount: Integer;
-      protected
-        function DoGetEnumerator: TEnumerator<T>; override;
-{$IFDEF FPC}
-        function GetPtrEnumerator: TEnumerator<PT>; overload;
-{$ENDIF}
-      public
-        constructor Create(const ArrayEx: TArrayEx<T>);
-        function GetEnumerator: TEnumerator<T>; reintroduce;
-        property Count: Integer read GetCount;
-      end;
-{$ENDIF}
 
     var
 {$IFNDEF MANAGEDRECORDS}
@@ -131,12 +119,7 @@ type
       FIndexArray   : array of array of integer;    // Hash structure
       FComparer     : IEqualityComparer<T>;         // Comparer
       FCapacity     : integer;                      // Amount of allocated memory for items
-      FArrayCount   : PNativeInt;
       FOptimisation : Boolean;                      // SetLength optimisations
-{$IFDEF MODERNCOMPILER}
-      FEnumInit     : string;                       // Iterator initialisation flag
-      FCollection   : TCollection;                  // Enumerator Collection
-{$ENDIF}
 
     function GetElements(Index: integer): T; {$IFDEF Inline} inline; {$ENDIF}
     procedure SetElements(Index: integer; const Value: T); {$IFDEF Inline} inline; {$ENDIF}
@@ -163,7 +146,7 @@ type
 {$ENDIF}
   public
     // Constructor
-    constructor Create(DoFreeData: boolean);
+    constructor Create(OwnValues: boolean);
 
     // Access to elements by default
     property Elements[Index: integer]: T read GetElements write SetElements; default;
@@ -236,6 +219,8 @@ type
     procedure Sort(CompareEvt: TCompareValue<T>; Mode: TCompareMode = cmAscending); overload;
     property Comparer: IEqualityComparer<T> read FComparer write FComparer;
 
+    // Compare
+    function CompareValuesWith(NewData: TArrayEx<T>): TArrayExCompareResults;
     // Serialisation to string
 {$IFNDEF FPC}
     function ToString: string; overload;
@@ -243,11 +228,10 @@ type
 {$ENDIF}
 
 {$IFDEF MODERNCOMPILER}
+    // Enumerator
     function GetEnumerator: TItemEnumerator;
-    function Collection: TCollection;
+  public
 {$ENDIF}
-
-    function CompareValuesWith(NewData: TArrayEx<T>): TArrayExCompareResults;
 
 {$IFDEF MANAGEDRECORDS}
     // Init array
@@ -278,6 +262,8 @@ var
 implementation
 
 uses TypInfo, RTTI;
+
+{$REGION 'Support functions & Types'}
 
 type
 {$IFNDEF FPC}
@@ -324,6 +310,8 @@ begin
     end;
   end;
 end;
+
+{$ENDREGION}
 
 function CompareVariantLocal(const Value1, Value2: Variant): TCompareResult;
 begin
@@ -422,7 +410,7 @@ var
 begin
   if (Index<0) or (Index>High) then Exit;
 
-  if DoFreeData and (PTypeInfo(TypeInfo(T)).Kind=tkClass) then begin
+  if OwnValues and (PTypeInfo(TypeInfo(T)).Kind=tkClass) then begin
     FreeElement(Index);
   end;
 
@@ -463,7 +451,7 @@ begin
   if (Count<1) then Exit;
   if Index+Count>Self.Count then Count:=Self.Count-Index;
 
-  if DoFreeData and (PTypeInfo(TypeInfo(TValue)).Kind=tkClass) then begin
+  if OwnValues and (PTypeInfo(TypeInfo(T)).Kind=tkClass) then begin
     for i:=Index to Index+Count-1 do begin
       FreeElement(i);
     end;
@@ -630,9 +618,17 @@ begin
   Result:=Items[Index];
 end;
 
+//function TArrayEx<T>.Collection: TCollection;
+//begin
+//  if not Assigned(FCollection) then begin
+//    FCollection:=TCollection.Create(Self);
+//  end;
+//  Result:=FCollection;
+//end;
+
 function TArrayEx<T>.GetEnumerator: TItemEnumerator;
 begin
-  Result := TItemEnumerator.Create(Self.Collection);
+  Result := TItemEnumerator.Create(Self);
 end;
 
 function TArrayEx<T>.GetFirst: T;
@@ -653,7 +649,9 @@ end;
 procedure TArrayEx<T>.HashClear(NewIndexMod: integer);
 begin
   System.SetLength(FIndexArray,0);
-  SetLength(FIndexArray,NewIndexMod);
+  if NewIndexMod<>0 then begin
+    System.SetLength(FIndexArray,NewIndexMod);
+  end;
 end;
 
 function TArrayEx<T>.GetCount: integer;
@@ -700,18 +698,14 @@ procedure TArrayEx<T>.Clear;
 var
   i: Integer;
 begin
-  if DoFreeData and (PTypeInfo(TypeInfo(T)).Kind=tkClass) then begin
+  if OwnValues and (PTypeInfo(TypeInfo(T)).Kind=tkClass) then begin
     for i:=0 to High do begin
       FreeElement(i);
     end;
   end;
 
-{$IFNDEF MANAGEDRECORDS}
-  FInitCapacity:='';
-{$ENDIF}
-  FArrayCount:=nil;
   SetLengthFast(0);
-  HashClear(Length(FIndexArray));
+  ClearIndex;
 end;
 
 procedure TArrayEx<T>.ClearIndex;
@@ -773,11 +767,11 @@ begin
   end;
 end;
 
-constructor TArrayEx<T>.Create(DoFreeData: boolean);
+constructor TArrayEx<T>.Create(OwnValues: boolean);
 begin
   Tag:=0;
   Clear;
-  Self.DoFreeData:=DoFreeData;
+  Self.OwnValues:=OwnValues;
 end;
 
 procedure TArrayEx<T>.CreateIndex(IndexMod: integer = -1);
@@ -857,9 +851,8 @@ begin
       if (NewValue>FCapacity) or (NewValue shl 1<FCapacity) then begin
         FCapacity:=Min(NewValue shl 1,NewValue+GrowLimit);
         SetLength(Items,FCapacity);
-        FArrayCount:=PNativeInt(NativeInt(@Items[0])-SizeOf(NativeInt));
       end;
-      FArrayCount^:=NewValue;
+      PNativeInt(NativeInt(@Items[0])-SizeOf(NativeInt))^:=NewValue;
     end else begin
       FCapacity:=NewValue;
       SetLength(Items,NewValue);
@@ -1037,48 +1030,24 @@ begin
   end;
 end;
 
-{$IFDEF MODERNCOMPILER}
-function TArrayEx<T>.Collection: TCollection;
-begin
-  if FEnumInit<>'Y' then begin
-    FCollection:=TCollection.Create(Self);
-    FEnumInit:='Y';
-    Tag:=0;
-  end;
-  Result:=FCollection;
-end;
-
 { TArrayEx<T>.TValueEnumerator }
 
-constructor TArrayEx<T>.TItemEnumerator.Create(Parent: TCollection);
+constructor TArrayEx<T>.TItemEnumerator.Create(const Parent: TArrayEx<T>);
 begin
   inherited Create;
   FIndex:=-1;
-  FParent:=Parent;
+  Self.Parent:=@Parent.Items;
 end;
 
 
 function TArrayEx<T>.TItemEnumerator.DoGetCurrent: T;
-type
-  TArrParent = TArrayEx<T>;
-  PArrParent = ^TArrParent;
-var
-  n : integer;
 begin
-  n:=System.Length(PArrParent(FParent.FParent)^.Items);
-  if n<=FIndex then begin
-    raise Exception.Create('Error Message');
-  end;
-
-  Result:=PArrParent(FParent.FParent)^.Items[FIndex];
+  Result:=Parent^[FIndex];
 end;
 
 function TArrayEx<T>.TItemEnumerator.DoMoveNext: Boolean;
-type
-  TArrParent = TArrayEx<T>;
-  PArrParent = ^TArrParent;
 begin
-  if FIndex<System.High(PArrParent(FParent.FParent)^.Items) then begin
+  if FIndex<System.High(Parent^) then begin
     inc(FIndex);
     Result:=True;
   end else begin
@@ -1096,54 +1065,25 @@ begin
   Result:=DoMoveNext;
 end;
 
-{ TArrayEx<T>.TCollection }
-
-constructor TArrayEx<T>.TCollection.Create(const ArrayEx: TArrayEx<T>);
-begin
-  inherited Create;
-  FParent:=@ArrayEx;
-end;
-
-function TArrayEx<T>.TCollection.DoGetEnumerator: TEnumerator<T>;
-begin
-  Result:=GetEnumerator;
-end;
-
-{$IFDEF FPC}
-function TArrayEx<T>.TCollection.GetPtrEnumerator: TEnumerator<PT>;
-begin
-  // not needed for code but needed by FPC
-end;
-{$ENDIF}
-
-function TArrayEx<T>.TCollection.GetCount: Integer;
-type
-  TArrParent = TArrayEx<T>;
-  PArrParent = ^TArrParent;
-begin
-  Result:=System.Length(PArrParent(FParent)^.Items);
-end;
-
-function TArrayEx<T>.TCollection.GetEnumerator: TEnumerator<T>;
-begin
-  Result:=TItemEnumerator.Create(Self);
-end;
-{$ENDIF}
-
 {$IFDEF MANAGEDRECORDS}
 class operator TArrayEx<T>.Initialize(out Dest: TArrayEx<T>);
 begin
   Dest.Tag:=0;
-  Dest.Clear;
+  Dest.FComparer:=nil;
+  Dest.FCapacity:=0;
+  Dest.FOptimisation:=TArrayExUseOptimisation;
+  Dest.OwnValues:=False;
 end;
 
 class operator TArrayEx<T>.Finalize(var Dest: TArrayEx<T>);
+var
+  i : integer;
 begin
-  if Dest.FEnumInit='Y' then begin
-    Dest.FCollection.Free;
-    Dest.FEnumInit:='';
+  if Dest.OwnValues and (PTypeInfo(TypeInfo(T)).Kind=tkClass) then begin
+    for i:=0 to Dest.High do begin
+      Dest.FreeElement(i);
+    end;
   end;
-  Dest.Clear;
 end;
 {$ENDIF}
 
