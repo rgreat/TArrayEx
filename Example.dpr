@@ -22,10 +22,12 @@ var
 
 procedure PrintArray(Name: string; const Arr: TArrayEx<Integer>);
 begin
-  WriteLn(Name,' = [',Arr.ToString(', '),']');
+  WriteLn(Name,' = [',Arr.ToString(','),']');
 end;
 
 begin
+  ReportMemoryLeaksOnShutdown:=True;
+
   A := [5,6,7,8,9];
   B := [1,2,3,4,5];
 
@@ -100,6 +102,14 @@ begin
   WriteLn('New elements added from D: [', TArrayEx<integer>(Compare.Added).ToString, ']');
   WriteLn('Existing elements removed from C: [', TArrayEx<integer>(Compare.Removed).ToString,']');
   WriteLn('Results come as indexes in arrays.');
+
+  WriteLn;
+  B:=[0,1,2,3,4,5,6,7,8,9];
+  C:=[10,11,12,13,14];
+  WriteLn('Insert ['+C.ToString(',')+'] into ['+B.ToString(',')+'] and index 5');
+  B.Insert(5,C);
+  PrintArray('Result',B);
+
 
   E.DoFreeData:=True;
   for i:=1 to 10 do begin

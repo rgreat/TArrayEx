@@ -28,7 +28,7 @@ interface
 {$ENDIF}
 
 uses
-  Classes, Generics.Defaults, Generics.Collections, SyncObjs, SysUtils, Math;
+  Classes, Generics.Defaults, Generics.Collections, SysUtils, Math;
 
 const
   HashTableDefExpectedCount = 64;
@@ -121,8 +121,8 @@ type
       FCapacity     : integer;                      // Amount of allocated memory for items
       FOptimisation : Boolean;                      // SetLength optimisations
 
-    function GetElements(Index: integer): T; {$IFDEF Inline} inline; {$ENDIF}
-    procedure SetElements(Index: integer; const Value: T); {$IFDEF Inline} inline; {$ENDIF}
+    function GetElement(Index: integer): T; {$IFDEF Inline} inline; {$ENDIF}
+    procedure SetElement(Index: integer; const Value: T); {$IFDEF Inline} inline; {$ENDIF}
     procedure QuickSortA(const Comparer: IComparer<T>; L, R: Integer); {$IFDEF Inline} inline; {$ENDIF}
     procedure QuickSortB(L, R: Integer; CompareEvt: TCompareValue<T>; Less, More: TCompareResult); {$IFDEF Inline} inline; {$ENDIF}
     procedure HashClear(NewIndexMod: integer); {$IFDEF Inline} inline; {$ENDIF}
@@ -149,7 +149,7 @@ type
     constructor Create(OwnValues: boolean);
 
     // Access to elements by default
-    property Elements[Index: integer]: T read GetElements write SetElements; default;
+    property Elements[Index: integer]: T read GetElement write SetElement; default;
 
     // Clear array
     procedure Clear; overload;
@@ -181,6 +181,7 @@ type
     procedure DeleteFirst; {$IFDEF Inline} inline; {$ENDIF}
     procedure DeleteLast; {$IFDEF Inline} inline; {$ENDIF}
 
+    // Copy elements
     function Copy(Index, Count: integer): TArrayEx<T>;
 
     // Assign data from Source
@@ -213,6 +214,7 @@ type
     function IndexesOf(Value: T): TArray<integer>; {$IFDEF Inline} inline; {$ENDIF}
 {$ENDIF}
     function IndexIsValid(Index: integer): boolean;
+    function RangeIsValid(Index, Length: integer): boolean;
 
     // Sort array
     procedure Sort(Comparer: IComparer<T> = nil); overload;
@@ -256,8 +258,11 @@ type
   {$ENDREGION}
 
 var
-  TArrayExUseOptimisation      : boolean = True;
-  TArrayExHideExceptionsOnFree : boolean = True;
+  // Global Modifiers
+
+  TArrayExUseOptimisation            : boolean = True;
+  TArrayExHideExceptionsOnFree       : boolean = True;
+  TArrayExHideExceptionsOnRangeCheck : boolean = False;
 
 implementation
 
@@ -349,36 +354,30 @@ begin
   if Length(FIndexArray)=0 then Exit;
 
   if Index>=Length(FIndexArray) then begin
-    CreateIndex(Index*2);
+    CreateIndex(Max(Index,FCapacity));
   end else begin
     HashAdd(Value,Index);
   end;
 end;
-
-//1. Benchmark TArrayEx<Integer>
-//Add 10.000.000 integers. 328 msec. 78 msec (Alt Add). 32 msec (optimised).
-//Add 10.000 integers in 10.000.000 iterations. 812 msec.
-//Locate 10.000 integers in 10.000.000 iterations. 813 msec.
 
 function TArrayEx<T>.Add(Value: T): integer;
 begin
   Result:=Length(Items);
   SetLengthFast(Result+1);
 
-  Items[Result]:=Value;
-  SetIndex(Result,Value);
+  Elements[Result]:=Value;
 end;
 
 function TArrayEx<T>.Add(const Values: array of T): integer;
 var
   i: Integer;
 begin
-  Result:=Length(Items);
+  Result:=Count;
   SetLengthFast(Result+Length(Values));
   for i:=0 to System.High(Values) do begin
-    Items[Result]:=Values[i];
-    SetIndex(Result,Values[i]);
+    Elements[Result+i]:=Values[i];
   end;
+  Result:=High;
 end;
 
 function TArrayEx<T>.AddUnique(Value: T): integer;
@@ -408,7 +407,10 @@ procedure TArrayEx<T>.Delete(Index: integer);
 var
   i: Integer;
 begin
-  if (Index<0) or (Index>High) then Exit;
+  if not IndexIsValid(Index) then begin
+    if TArrayExHideExceptionsOnRangeCheck then Exit;
+    raise ERangeError.Create(Index.ToString+' is outside of array ['+Low.ToString+'..'+High.ToString+']');
+  end;
 
   if OwnValues and (PTypeInfo(TypeInfo(T)).Kind=tkClass) then begin
     FreeElement(Index);
@@ -419,14 +421,17 @@ begin
   end;
   SetLengthFast(Length(Items)-1);
 
-  CreateIndex(Length(FIndexArray));
+  DropIndex;
 end;
 
 procedure TArrayEx<T>.DeleteValues(Value: T);
+var
+  i   : integer;
+  Idx : TArrayEx<integer>;
 begin
-  var Idx:=IndexesOf(Value);
+  Idx:=IndexesOf(Value);
 
-  for var i:=Idx.High downto 0 do begin
+  for i:=Idx.High downto 0 do begin
     Delete(Idx[i]);
   end;
 end;
@@ -446,7 +451,10 @@ procedure TArrayEx<T>.DeleteRange(Index, Count: integer);
 var
   i: Integer;
 begin
-  if (Index<0) or (Index>High) then Exit;
+  if not RangeIsValid(Index, Count) then begin
+    if TArrayExHideExceptionsOnRangeCheck then Exit;
+    raise ERangeError.Create('Range ['+Index.ToString+'..'+(Index+Count-1).ToString+'] is outside of array ['+Low.ToString+'..'+High.ToString+']');
+  end;
 
   if (Count<1) then Exit;
   if Index+Count>Self.Count then Count:=Self.Count-Index;
@@ -462,7 +470,7 @@ begin
   end;
   SetLengthFast(Length(Items)-Count);
 
-  CreateIndex(Length(FIndexArray));
+  DropIndex;
 end;
 
 procedure TArrayEx<T>.DropIndex;
@@ -507,11 +515,6 @@ begin
   Result.Sort;
 end;
 
-function TArrayEx<T>.IndexIsValid(Index: integer): boolean;
-begin
-  Result:=(Index>=0) and (Index<=High);
-end;
-
 {$ELSE}
 
 function TArrayEx<T>.IndexesOf(Value: T): TArray<integer>;
@@ -522,12 +525,15 @@ begin
     if not Assigned(FComparer) then begin
       FComparer:=TEqualityComparer<T>.Default;
     end;
+    n:=-1;
     for i:=0 to High do begin
-      if FComparer.Equals(Items[i]],Value) then begin
-        Exit(i);
+      if FComparer.Equals(Items[i],Value) then begin
+        inc(n);
+        SetLength(Result,n+1);
+        Result[n]:=i;
       end;
     end;
-    Exit(-1);
+    Exit;
   end;
 
   m:=Length(FIndexArray);
@@ -550,6 +556,16 @@ begin
   end;
 end;
 {$ENDIF}
+
+function TArrayEx<T>.IndexIsValid(Index: integer): boolean;
+begin
+  Result:=(Index>=0) and (Index<=High);
+end;
+
+function TArrayEx<T>.RangeIsValid(Index, Length: integer): boolean;
+begin
+  Result:=(Index>=0) and ((Index+Length<=Count));
+end;
 
 
 function TArrayEx<T>.IndexOf(Value: T): integer;
@@ -594,18 +610,21 @@ procedure TArrayEx<T>.Insert(Index: integer; const Values: array of T);
 var
   i: Integer;
 begin
-  if (Index<0) or (Index>Count) then Exit;
+  if (Index>0) and (Index>Count) then begin
+    if TArrayExHideExceptionsOnRangeCheck then Exit;
+    raise ERangeError.Create(Index.ToString+' is outside of array ['+Low.ToString+'..'+High.ToString+']');
+  end;
 
   SetLengthFast(Length(Items)+length(Values));
   for i:=High downto Index+length(Values) do begin
     Items[i]:=Items[i-length(Values)];
   end;
 
-  for i:=Index to System.High(Values) do begin
+  for i:=0 to System.High(Values) do begin
     Items[Index+i]:=Values[i];
   end;
 
-  CreateIndex(Length(FIndexArray));
+  DropIndex;
 end;
 
 function TArrayEx<T>.IsEmpty: boolean;
@@ -613,8 +632,13 @@ begin
   Result:=Count=0;
 end;
 
-function TArrayEx<T>.GetElements(Index: integer): T;
+function TArrayEx<T>.GetElement(Index: integer): T;
 begin
+  if not IndexIsValid(Index) then begin
+    if TArrayExHideExceptionsOnRangeCheck then Exit(Default(T));
+    raise ERangeError.Create(Index.ToString+' is outside of array ['+Low.ToString+'..'+High.ToString+']');
+  end;
+
   Result:=Items[Index];
 end;
 
@@ -625,11 +649,21 @@ end;
 
 function TArrayEx<T>.GetFirst: T;
 begin
+  if IsEmpty then begin
+    if TArrayExHideExceptionsOnRangeCheck then Exit(Default(T));
+    raise ERangeError.Create('Array is Empty');
+  end;
+
   Result:=Items[0];
 end;
 
 function TArrayEx<T>.GetLast: T;
 begin
+  if IsEmpty then begin
+    if TArrayExHideExceptionsOnRangeCheck then Exit(Default(T));
+    raise ERangeError.Create('Array is Empty');
+  end;
+
   Result:=Items[High];
 end;
 
@@ -640,8 +674,10 @@ end;
 
 procedure TArrayEx<T>.HashClear(NewIndexMod: integer);
 begin
+  if (NewIndexMod=0) and (Length(FIndexArray)=0) then Exit;
+
   System.SetLength(FIndexArray,0);
-  if NewIndexMod<>0 then begin
+  if NewIndexMod>0 then begin
     System.SetLength(FIndexArray,NewIndexMod);
   end;
 end;
@@ -674,15 +710,11 @@ end;
 
 procedure TArrayEx<T>.FreeElement(Num: integer);
 begin
-  if TArrayExHideExceptionsOnFree then begin
-    try
-      PObject(@Items[num])^.Free;
-      Items[num]:=Default(T);
-    except
-    end;
-  end else begin
+  try
     PObject(@Items[num])^.Free;
     Items[num]:=Default(T);
+  except
+    if not TArrayExHideExceptionsOnFree then Raise;
   end;
 end;
 
@@ -753,6 +785,12 @@ var
   i : integer;
 begin
   Result.Clear;
+
+  if not RangeIsValid(Index, Count) then begin
+    if TArrayExHideExceptionsOnRangeCheck then Exit;
+    raise ERangeError.Create('Range ['+Index.ToString+'..'+(Index+Count-1).ToString+'] is outside of array ['+Low.ToString+'..'+High.ToString+']');
+  end;
+
   Result.Count:=Count;
   for i:=0 to Count-1 do begin
     Result.Items[i]:=Items[Index+i];
@@ -792,7 +830,10 @@ procedure TArrayEx<T>.Insert(Index: integer; Value: T);
 var
   i: Integer;
 begin
-  if (Index<0) or (Index>Count) then Exit;
+  if (Index>0) and (Index>Count) then begin
+    if TArrayExHideExceptionsOnRangeCheck then Exit;
+    raise ERangeError.Create(Index.ToString+' is outside of array ['+Low.ToString+'..'+High.ToString+']');
+  end;
 
   SetLengthFast(Length(Items)+1);
   for i:=High downto Index+1 do begin
@@ -800,24 +841,37 @@ begin
   end;
   Items[Index]:=Value;
 
-  CreateIndex(Length(FIndexArray));
+  DropIndex;
 end;
 
-procedure TArrayEx<T>.SetElements(Index: integer; const Value: T);
+procedure TArrayEx<T>.SetElement(Index: integer; const Value: T);
 begin
-  if (Index<0) or (Index>High) then Exit;
-  Items[Index]:=Value;
+  if not IndexIsValid(Index) then begin
+    if TArrayExHideExceptionsOnRangeCheck then Exit;
+    raise ERangeError.Create(Index.ToString+' is outside of array ['+Low.ToString+'..'+High.ToString+']');
+  end;
 
+  Items[Index]:=Value;
   SetIndex(Index,Value);
 end;
 
 procedure TArrayEx<T>.SetFirst(const Value: T);
 begin
+  if IsEmpty then begin
+    if TArrayExHideExceptionsOnRangeCheck then Exit;
+    raise ERangeError.Create('Array is Empty');
+  end;
+
   Items[0]:=Value;
 end;
 
 procedure TArrayEx<T>.SetLast(const Value: T);
 begin
+  if IsEmpty then begin
+    if TArrayExHideExceptionsOnRangeCheck then Exit;
+    raise ERangeError.Create('Array is Empty');
+  end;
+
   Items[High]:=Value;
 end;
 
@@ -1138,8 +1192,7 @@ begin
   Result:=Length(Items);
   SetLengthFast(Result+Values.Count);
   for i:=0 to Values.High do begin
-    Items[Result+i]:=Values.Items[i];
-    SetIndex(Result,Values.Items[i]);
+    Elements[Result+i]:=Values.Items[i];
   end;
 end;
 
