@@ -260,7 +260,7 @@ type
 var
   // Global Modifiers
 
-  TArrayExUseOptimisation            : boolean = True;
+  TArrayExUseOptimisation            : boolean = False;
   TArrayExHideExceptionsOnFree       : boolean = True;
   TArrayExHideExceptionsOnRangeCheck : boolean = False;
 
