@@ -316,8 +316,6 @@ begin
   end;
 end;
 
-{$ENDREGION}
-
 function CompareVariantLocal(const Value1, Value2: Variant): TCompareResult;
 begin
   if Value1<Value2 then begin
@@ -330,6 +328,8 @@ begin
     end;
   end;
 end;
+
+{$ENDREGION}
 
 {$REGION 'TArrayEx Implementation'}
 
